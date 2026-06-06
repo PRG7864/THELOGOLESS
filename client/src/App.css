@@ -182,3 +182,181 @@
     border-right-color: var(--border);
   }
 }
+
+/* Search Container & Wrapper */
+.navbar-search-wrapper {
+  position: relative;
+  width: 42px;
+  height: 42px;
+  transition: width 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.navbar-search-wrapper.open {
+  width: 320px;
+  margin-right: 15px;
+}
+
+@media (max-width: 900px) {
+  .navbar-search-wrapper {
+    width: 42px;
+  }
+  .navbar-search-wrapper.open {
+    width: 100%;
+    margin-right: 0;
+  }
+}
+
+.navbar-search-input-wrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+  width: 100%;
+  background: #ffffff;
+  border: 1px solid #111112;
+  transition: border-color 0.25s ease, box-shadow 0.25s ease;
+}
+
+.navbar-search-input-wrapper:focus-within {
+  border-color: var(--color-accent-gold, #C5B49E);
+  box-shadow: 0 0 0 2px rgba(197, 180, 158, 0.15);
+}
+
+.navbar-search-icon-left {
+  position: absolute;
+  left: 12px;
+  width: 18px;
+  height: 18px;
+  stroke: #111112;
+  opacity: 0.8;
+  pointer-events: none;
+}
+
+.navbar-search-input {
+  width: 100%;
+  height: 40px;
+  padding: 10px 36px 10px 40px;
+  font-size: 0.95rem;
+  font-family: inherit;
+  color: #111112;
+  background: transparent;
+  border: none;
+  outline: none;
+}
+
+.navbar-search-input::placeholder {
+  color: #777777;
+  opacity: 0.8;
+}
+
+.navbar-search-clear {
+  position: absolute;
+  right: 10px;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  color: #111112;
+  opacity: 0.6;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4px;
+  transition: opacity 0.2s;
+}
+
+.navbar-search-clear:hover {
+  opacity: 1;
+}
+
+.navbar-search-clear svg {
+  width: 14px;
+  height: 14px;
+}
+
+/* Search Dropdown / Autocomplete suggestions */
+.navbar-search-dropdown {
+  position: absolute;
+  top: 100%;
+  left: -1px; /* Align with input border */
+  width: calc(100% + 2px); /* Compensate for borders */
+  background: #ffffff;
+  border: 1px solid #111112;
+  border-top: none; /* Seamless connection */
+  z-index: 2100;
+  max-height: 400px;
+  overflow-y: auto;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
+  animation: dropdownFadeIn 0.2s ease-out;
+}
+
+@keyframes dropdownFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.navbar-search-dropdown-item {
+  display: flex;
+  align-items: center;
+  padding: 12px 16px;
+  cursor: pointer;
+  background: #ffffff;
+  color: #111112;
+  transition: background 0.15s ease, color 0.15s ease;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.05);
+}
+
+.navbar-search-dropdown-item:last-child {
+  border-bottom: none;
+}
+
+.navbar-search-dropdown-item:hover {
+  background: rgba(197, 180, 158, 0.1);
+  color: var(--color-accent-gold, #C5B49E);
+}
+
+.navbar-search-dropdown-icon {
+  width: 16px;
+  height: 16px;
+  margin-right: 14px;
+  margin-left: 2px;
+  stroke: #111112;
+  opacity: 0.6;
+  flex-shrink: 0;
+  transition: stroke 0.15s ease, opacity 0.15s ease;
+}
+
+.navbar-search-dropdown-item:hover .navbar-search-dropdown-icon {
+  stroke: var(--color-accent-gold, #C5B49E);
+  opacity: 1;
+}
+
+.navbar-search-dropdown-text {
+  font-size: 0.9rem;
+  font-weight: 400;
+  letter-spacing: 0.02em;
+}
+
+/* Backdrop Overlay for active search */
+.navbar-search-backdrop {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  background: rgba(0, 0, 0, 0.6);
+  z-index: 990; /* below navbar's z-index 1000 */
+  backdrop-filter: blur(2px);
+  -webkit-backdrop-filter: blur(2px);
+  animation: backdropFadeIn 0.2s ease-out;
+}
+
+@keyframes backdropFadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+

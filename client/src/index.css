@@ -574,7 +574,7 @@ body.light .btn-secondary {
     padding-right: 12px;
 }
 
-.navbar.nav-hidden > .container {
+.navbar.nav-hidden>.container {
     transform: none;
 }
 
@@ -586,7 +586,7 @@ body.light .btn-secondary {
 
 .nav-logo {
     font-family: var(--font-display);
-    font-size: 1.1rem;
+    font-size: 1.35rem;
     font-weight: 500;
     letter-spacing: 0.4em;
     color: var(--color-text-light);
@@ -2769,6 +2769,33 @@ body.light .form-group input {
     border-color: var(--color-accent-gold);
 }
 
+/* Autofill Overrides to maintain premium luxury aesthetics */
+input:-webkit-autofill,
+input:-webkit-autofill:hover,
+input:-webkit-autofill:focus,
+input:-webkit-autofill:active {
+    -webkit-box-shadow: 0 0 0 1000px #1a1a1b inset !important;
+    -webkit-text-fill-color: #FAF9F6 !important;
+    transition: background-color 5000s ease-in-out 0s;
+}
+
+input:-webkit-autofill:focus {
+    border-color: var(--color-accent-gold) !important;
+}
+
+body.light input:-webkit-autofill,
+body.light input:-webkit-autofill:hover,
+body.light input:-webkit-autofill:focus,
+body.light input:-webkit-autofill:active {
+    -webkit-box-shadow: 0 0 0 1000px #ffffff inset !important;
+    -webkit-text-fill-color: #0b0b0c !important;
+    transition: background-color 5000s ease-in-out 0s;
+}
+
+body.light input:-webkit-autofill:focus {
+    border-color: var(--color-accent-gold) !important;
+}
+
 .auth-modal-overlay {
     position: fixed;
     inset: 0;
@@ -4082,6 +4109,68 @@ body.light .storefront-sort {
     border-color: rgba(11, 11, 12, 0.12);
 }
 
+.storefront-search-container {
+    position: relative;
+    min-width: 200px;
+    max-width: 300px;
+    flex-grow: 1;
+}
+
+.storefront-search-input {
+    width: 100%;
+    padding: 12px 16px;
+    padding-right: 36px;
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    background: transparent;
+    color: var(--color-text);
+    font: inherit;
+    font-size: 14px;
+    outline: none;
+    transition: border-color 0.3s;
+}
+
+.storefront-search-input::placeholder {
+    color: var(--color-text-muted);
+}
+
+.storefront-search-input:focus {
+    border-color: rgba(255, 255, 255, 0.3);
+}
+
+body.light .storefront-search-input {
+    border-color: rgba(11, 11, 12, 0.12);
+    color: rgba(11, 11, 12, 0.9);
+}
+
+body.light .storefront-search-input::placeholder {
+    color: rgba(11, 11, 12, 0.5);
+}
+
+body.light .storefront-search-input:focus {
+    border-color: rgba(11, 11, 12, 0.3);
+}
+
+.storefront-search-clear {
+    position: absolute;
+    right: 12px;
+    top: 50%;
+    transform: translateY(-50%);
+    background: none;
+    border: none;
+    color: var(--color-text-muted);
+    cursor: pointer;
+    font-size: 18px;
+    padding: 4px 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: color 0.3s;
+}
+
+.storefront-search-clear:hover {
+    color: var(--color-text);
+}
+
 .storefront-category-row {
     display: flex;
     flex-wrap: wrap;
@@ -4731,6 +4820,7 @@ body.light .storefront-layout-full .storefront-sidebar {
 }
 
 @media (max-width: 1180px) {
+
     .storefront-layout-full,
     .storefront-layout-full.filters-collapsed {
         grid-template-columns: 1fr;
@@ -4859,13 +4949,16 @@ body.light .deliver-badge strong {
     align-items: center;
     gap: 8px;
     overflow-x: auto;
-    scrollbar-width: none; /* Firefox */
-    -ms-overflow-style: none;  /* IE and Edge */
+    scrollbar-width: none;
+    /* Firefox */
+    -ms-overflow-style: none;
+    /* IE and Edge */
     padding-bottom: 2px;
 }
 
 .sub-nav-links::-webkit-scrollbar {
-    display: none; /* Chrome, Safari and Opera */
+    display: none;
+    /* Chrome, Safari and Opera */
 }
 
 .sub-nav-link {
@@ -5065,11 +5158,13 @@ body.light .coupon-copy-btn {
     .featured-categories-grid {
         grid-template-columns: repeat(3, 1fr);
     }
+
     .sub-nav-container {
         flex-direction: column;
         align-items: flex-start;
         gap: 12px;
     }
+
     .sub-nav-links {
         width: 100%;
     }
@@ -5080,6 +5175,7 @@ body.light .coupon-copy-btn {
         grid-template-columns: repeat(2, 1fr);
         gap: 12px;
     }
+
     .detail-coupon-section {
         grid-template-columns: 1fr;
     }

@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
+import './App.css';
 
 // Default seeded products fallback
 const defaultProducts = [
@@ -283,7 +284,7 @@ const productDetailAccordions = [
     }
 ];
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || '';
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5001';
 
 const getSavedUser = () => {
     try {
@@ -331,6 +332,11 @@ export default function App() {
     const [filterDraft, setFilterDraft] = useState({});
     const [appliedFilters, setAppliedFilters] = useState({});
     const [sortMode, setSortMode] = useState('Featured');
+    const [searchQuery, setSearchQuery] = useState('');
+    const [searchResults, setSearchResults] = useState([]);
+    const [suggestions, setSuggestions] = useState([]);
+    const [isSearchFocused, setIsSearchFocused] = useState(false);
+    const [isSearchOpen, setIsSearchOpen] = useState(false);
     const [routePath, setRoutePath] = useState(window.location.pathname);
     const [routeTransitionPhase, setRouteTransitionPhase] = useState('idle');
     const [routeTransitionDirection] = useState('forward');
@@ -427,7 +433,7 @@ export default function App() {
                 return res.json();
             })
             .then(data => setCart(backendCartToLocalCart(data)))
-            .catch(() => {});
+            .catch(() => { });
     }, [authToken]);
 
     // Fetch Products from API
@@ -597,7 +603,7 @@ export default function App() {
                     return res.json();
                 })
                 .then(data => setCart(backendCartToLocalCart(data)))
-                .catch(() => {});
+                .catch(() => { });
             return;
         }
 
@@ -626,7 +632,7 @@ export default function App() {
                     return res.json();
                 })
                 .then(data => setCart(backendCartToLocalCart(data)))
-                .catch(() => {});
+                .catch(() => { });
             return;
         }
 
@@ -652,7 +658,7 @@ export default function App() {
 
     const handleCopyCode = (code) => {
         if (navigator.clipboard?.writeText) {
-            navigator.clipboard.writeText(code).catch(() => {});
+            navigator.clipboard.writeText(code).catch(() => { });
         }
         setCopiedCode(code);
         window.setTimeout(() => setCopiedCode(''), 1600);
@@ -674,13 +680,21 @@ export default function App() {
             ? authForm
             : { email: authForm.email, password: authForm.password };
 
+        console.log('Auth request to:', `${API_BASE_URL}${endpoint}`, payload);
+
         fetch(`${API_BASE_URL}${endpoint}`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(payload)
         })
             .then(async res => {
-                const data = await res.json();
+                let data = {};
+                const text = await res.text();
+                try {
+                    data = text ? JSON.parse(text) : {};
+                } catch {
+                    throw new Error(`Server returned status ${res.status}`);
+                }
                 if (!res.ok) throw new Error(data.error || 'Authentication failed');
                 return data;
             })
@@ -716,7 +730,7 @@ export default function App() {
                         .then(apiCart => {
                             if (apiCart) setCart(backendCartToLocalCart(apiCart));
                         })
-                        .catch(() => {});
+                        .catch(() => { });
                 }
                 window.setTimeout(() => setAccountOpen(false), 700);
             })
@@ -734,7 +748,108 @@ export default function App() {
         setAuthMessage('Signed out.');
     };
 
-    // --- CHECKOUT SUBMISSION ---
+    const handleSearch = (query) => {
+        setSearchQuery(query);
+        if (!query.trim()) {
+            setSuggestions([]);
+            setSearchResults([]);
+            return;
+        }
+
+        const lowerQuery = query.toLowerCase().trim();
+        const baseSuggestions = [
+            'shirts',
+            'shirts plain',
+            'shirts linen',
+            'shirts cotton',
+            'shirts checks',
+            'shorts',
+            'shorts linen',
+            'shorts cotton',
+            'shorts relaxed',
+            'jeans',
+            'jeans denim',
+            'jeans raw',
+            'jeans straight',
+            'jeans classic',
+            'jeans high-waist',
+            't-shirts',
+            't-shirts oversized',
+            't-shirts baggy',
+            't-shirts organic',
+            't-shirts heavyweight',
+            'polos',
+            'polos knit',
+            'polos ribbed',
+            'polos cotton',
+            'polos classic',
+            'polos pink',
+            'trousers',
+            'trousers relaxed',
+            'trousers linen',
+            'trousers cotton',
+            'plus-size',
+            'plus-size kurtas',
+            'plus-size shirts',
+            'plus-size tops',
+        ];
+
+        const startsWithQuery = baseSuggestions.filter(s => s.startsWith(lowerQuery));
+        const containsQuery = baseSuggestions.filter(s => !s.startsWith(lowerQuery) && s.includes(lowerQuery));
+        const filteredSuggestions = [...startsWithQuery, ...containsQuery].slice(0, 6);
+
+        setSuggestions(filteredSuggestions);
+
+        // Word-by-word matching logic for Enter and immediate filtering
+        const filteredProducts = heroSlidesData.filter(p => {
+            const words = lowerQuery.split(/\s+/).filter(Boolean);
+            return words.every(w => {
+                const wSingular = (w.endsWith('s') && w.length > 3) ? w.slice(0, -1) : w;
+                const targets = [
+                    p.name,
+                    p.category,
+                    p.material,
+                    p.tagline,
+                    p.description || ''
+                ].map(t => t.toLowerCase());
+                return targets.some(t => t.includes(w) || t.includes(wSingular));
+            });
+        });
+        setSearchResults(filteredProducts);
+    };
+
+    const handleSelectSuggestion = (suggestion) => {
+        setSearchQuery(suggestion);
+        setSelectedStoreCategory('ALL');
+
+        const lowerQuery = suggestion.toLowerCase().trim();
+        const filteredProducts = heroSlidesData.filter(p => {
+            const words = lowerQuery.split(/\s+/).filter(Boolean);
+            return words.every(w => {
+                const wSingular = (w.endsWith('s') && w.length > 3) ? w.slice(0, -1) : w;
+                const targets = [
+                    p.name,
+                    p.category,
+                    p.material,
+                    p.tagline,
+                    p.description || ''
+                ].map(t => t.toLowerCase());
+                return targets.some(t => t.includes(w) || t.includes(wSingular));
+            });
+        });
+        setSearchResults(filteredProducts);
+
+        navigateTo('/shop');
+        setIsSearchFocused(false);
+    };
+
+    const handleExecuteSearch = (query) => {
+        if (!query.trim()) return;
+        setSelectedStoreCategory('ALL');
+        navigateTo('/shop');
+        setIsSearchFocused(false);
+    };
+
     const handleCheckoutSubmit = (e) => {
         e.preventDefault();
         setCheckoutLoading(true);
@@ -896,9 +1011,31 @@ export default function App() {
     const activeFilterCount = Object.values(appliedFilters).reduce((sum, values) => sum + values.length, 0);
 
     const filteredStoreProducts = heroSlidesData.filter((product) => {
-        if (selectedStoreCategory === 'ALL' || selectedStoreCategory === 'NEW') return true;
-        const matchTarget = `${product.category} ${product.name}`.toUpperCase();
-        return matchTarget.includes(selectedStoreCategory);
+        // Filter by category
+        if (selectedStoreCategory !== 'ALL' && selectedStoreCategory !== 'NEW') {
+            const matchTarget = `${product.category} ${product.name}`.toUpperCase();
+            if (!matchTarget.includes(selectedStoreCategory)) return false;
+        }
+
+        // Filter by search query
+        if (searchQuery.trim()) {
+            const searchLower = searchQuery.toLowerCase();
+            const words = searchLower.split(/\s+/).filter(Boolean);
+            const matchesSearch = words.every(w => {
+                const wSingular = (w.endsWith('s') && w.length > 3) ? w.slice(0, -1) : w;
+                const targets = [
+                    product.name,
+                    product.category,
+                    product.material,
+                    product.tagline,
+                    product.description || ''
+                ].map(t => t.toLowerCase());
+                return targets.some(t => t.includes(w) || t.includes(wSingular));
+            });
+            if (!matchesSearch) return false;
+        }
+
+        return true;
     }).filter((product) => {
         return storefrontFilterGroups.every((group) => matchesFilterGroup(product, group.key, appliedFilters[group.key] || []));
     }).sort((a, b) => {
@@ -972,6 +1109,10 @@ export default function App() {
 
     return (
         <>
+            {isSearchOpen && (
+                <div className="navbar-search-backdrop" onMouseDown={() => { setIsSearchFocused(false); setIsSearchOpen(false); }}></div>
+            )}
+
             {/* Scroll progress indicator */}
             <div className="progress-bar" style={{ transform: `scaleX(${scrollProgress / 100})` }}></div>
 
@@ -990,17 +1131,81 @@ export default function App() {
                             <span></span>
                         </button>
                     </div>
-                    
-                    <a href="#hero" className="nav-logo">T H E L O G O L E S S</a>
+
+                    <a href="#hero" className="nav-logo">THELOGOLESS</a>
 
                     <div className="nav-right-controls">
-                        <button className="nav-search-btn" type="button" aria-label="Search catalog" onClick={() => { setSelectedStoreCategory('PINK'); navigateTo('/shop'); setMenuOpen(false); }}>
-                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                                <circle cx="11" cy="11" r="7"></circle>
-                                <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
-                            </svg>
-                            <span>Search "PINK SHIRTS"</span>
-                        </button>
+                        <div className={`navbar-search-wrapper ${isSearchOpen ? 'open' : ''}`}>
+                            {isSearchOpen ? (
+                                <div className="navbar-search-input-wrapper">
+                                    <svg className="navbar-search-icon-left" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+                                        <circle cx="11" cy="11" r="7"></circle>
+                                        <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+                                    </svg>
+                                    <input
+                                        type="text"
+                                        className="navbar-search-input"
+                                        placeholder="Search products..."
+                                        value={searchQuery}
+                                        onChange={(e) => handleSearch(e.target.value)}
+                                        onFocus={() => setIsSearchFocused(true)}
+                                        onBlur={() => setTimeout(() => setIsSearchFocused(false), 200)}
+                                        onKeyPress={(e) => e.key === 'Enter' && handleExecuteSearch(searchQuery)}
+                                        autoFocus
+                                    />
+                                    <button
+                                        className="navbar-search-clear"
+                                        type="button"
+                                        onClick={() => {
+                                            if (searchQuery) {
+                                                handleSearch('');
+                                            } else {
+                                                setIsSearchOpen(false);
+                                            }
+                                        }}
+                                        aria-label="Close search"
+                                    >
+                                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                            <line x1="18" y1="6" x2="6" y2="18"></line>
+                                            <line x1="6" y1="6" x2="18" y2="18"></line>
+                                        </svg>
+                                    </button>
+                                </div>
+                            ) : (
+                                <button
+                                    className="nav-icon-btn"
+                                    type="button"
+                                    aria-label="Open search"
+                                    onClick={() => {
+                                        setIsSearchOpen(true);
+                                        setIsSearchFocused(true);
+                                    }}
+                                >
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                                        <circle cx="11" cy="11" r="7"></circle>
+                                        <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+                                    </svg>
+                                </button>
+                            )}
+
+                            {isSearchOpen && isSearchFocused && searchQuery && suggestions.length > 0 && (
+                                <div className="navbar-search-dropdown">
+                                    {suggestions.map((suggestion, index) => (
+                                        <div
+                                            key={index}
+                                            className="navbar-search-dropdown-item"
+                                            onMouseDown={() => handleSelectSuggestion(suggestion)}
+                                        >
+                                            <svg className="navbar-search-dropdown-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+                                                <circle cx="11" cy="11" r="7"></circle>
+                                                <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+                                            </svg>
+                                            <span className="navbar-search-dropdown-text">{suggestion}</span>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
 
                         <button
                             className={`nav-icon-btn ${currentUser ? 'signed-in' : ''}`}
@@ -1054,7 +1259,7 @@ export default function App() {
                         </ul>
                     </div>
                 </div>
-                
+
                 {/* --- HORIZONTAL SUB-NAVIGATION TABS BAR --- */}
                 <div className="navbar-sub-nav">
                     <div className="container sub-nav-container">
@@ -2113,6 +2318,26 @@ export default function App() {
                                     <div>
                                         <span className="accent-text">Featured Edit</span>
                                         <h3>{listingTitle}</h3>
+                                    </div>
+                                    <div className="storefront-search-container">
+                                        <input
+                                            type="text"
+                                            placeholder="Search products..."
+                                            className="storefront-search-input"
+                                            value={searchQuery}
+                                            onChange={(e) => setSearchQuery(e.target.value)}
+                                            aria-label="Search products"
+                                        />
+                                        {searchQuery && (
+                                            <button
+                                                className="storefront-search-clear"
+                                                type="button"
+                                                onClick={() => setSearchQuery('')}
+                                                aria-label="Clear search"
+                                            >
+                                                ✕
+                                            </button>
+                                        )}
                                     </div>
                                     <select
                                         className="storefront-sort"
