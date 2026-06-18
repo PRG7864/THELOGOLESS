@@ -1,11 +1,11 @@
 import { Router } from 'express';
 import { readJsonDB, writeJsonDB, createId } from '../models/database.js';
-import { PRODUCTS_FILE, ORDERS_FILE } from '../config/constants.js';
+import { PRODUCTS_FILE, ORDERS_FILE, NEWSLETTER_FILE } from '../config/constants.js';
 import { requireAdmin } from '../middleware/auth.js';
 
 export const createAdminRouter = (dbContext) => {
   const router = Router();
-  const { Product, Order, isMongo } = dbContext;
+  const { Product, Order, Newsletter, isMongo } = dbContext;
 
   router.use(requireAdmin);
 
@@ -129,6 +129,18 @@ export const createAdminRouter = (dbContext) => {
       res.json({ success: true, product: products[index] });
     } catch (error) {
       res.status(500).json({ error: 'Failed to delete product' });
+    }
+  });
+
+  router.get('/newsletter', async (req, res) => {
+    try {
+      const subs = isMongo
+        ? await Newsletter.find({}).sort({ subscribedAt: -1 })
+        : readJsonDB(NEWSLETTER_FILE).reverse();
+
+      res.json(subs);
+    } catch (error) {
+      res.status(500).json({ error: 'Failed to retrieve newsletter subscribers' });
     }
   });
 

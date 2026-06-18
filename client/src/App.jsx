@@ -308,6 +308,18 @@ const backendCartToLocalCart = (apiCart) => {
     }));
 };
 
+const parseCustomizerSize = (sizeStr) => {
+    if (!sizeStr || !sizeStr.includes('|')) return null;
+    const parts = sizeStr.split('|').map(p => p.trim());
+    const size = parts[0];
+    const details = {};
+    parts.slice(1).forEach(part => {
+        const [key, val] = part.split(':').map(s => s.trim());
+        if (key && val) details[key] = val;
+    });
+    return { size, details };
+};
+
 export default function App() {
     // --- STYLING & NAVIGATION STATES ---
     const [light, setLight] = useState(false);
@@ -338,6 +350,14 @@ export default function App() {
     const [isSearchFocused, setIsSearchFocused] = useState(false);
     const [isSearchOpen, setIsSearchOpen] = useState(false);
     const [routePath, setRoutePath] = useState(window.location.pathname);
+    const productRouteMatch = routePath.match(/^\/product\/([^/]+)$/);
+    const routeProduct = productRouteMatch
+        ? heroSlidesData.find((product) => product.id === productRouteMatch[1]) || null
+        : null;
+    const isShopRoute = routePath === '/shop';
+    const isProductRoute = Boolean(routeProduct);
+    const isAdminRoute = routePath === '/admin';
+    const isOrdersRoute = routePath === '/orders';
     const [routeTransitionPhase, setRouteTransitionPhase] = useState('idle');
     const [routeTransitionDirection] = useState('forward');
 
@@ -359,6 +379,26 @@ export default function App() {
     const [authForm, setAuthForm] = useState({ name: '', email: '', password: '' });
     const [authToken, setAuthToken] = useState(() => localStorage.getItem('thelogoless_token') || '');
     const [currentUser, setCurrentUser] = useState(() => getSavedUser());
+        // --- ADMIN & ORDER HISTORY STATES ---
+    const [ordersList, setOrdersList] = useState([]);
+    const [ordersLoading, setOrdersLoading] = useState(false);
+    const [adminOrders, setAdminOrders] = useState([]);
+    const [adminOrdersLoading, setAdminOrdersLoading] = useState(false);
+    const [adminSubs, setAdminSubs] = useState([]);
+    const [adminSubsLoading, setAdminSubsLoading] = useState(false);
+    const [adminTab, setAdminTab] = useState('orders');
+    const [productModalOpen, setProductModalOpen] = useState(false);
+    const [editingProduct, setEditingProduct] = useState(null);
+    const [productForm, setProductForm] = useState({
+        name: '',
+        category: 'T-SHIRTS',
+        price: '',
+        material: '',
+        description: '',
+        image: '/logo_tee_mockup.png',
+        sizes: 'S, M, L, XL',
+        stock: 10
+    });
 
     // --- CUSTOMIZER STATES ---
     const [customizerState, setCustomizerState] = useState({
@@ -448,6 +488,58 @@ export default function App() {
                 setProducts(defaultProducts);
             });
     }, []);
+
+    // Fetch Customer Orders
+    useEffect(() => {
+        if (!isOrdersRoute || !authToken) return;
+
+        setOrdersLoading(true);
+        fetch(`${API_BASE_URL}/api/orders/my`, {
+            headers: { Authorization: `Bearer ${authToken}` }
+        })
+            .then(res => {
+                if (!res.ok) throw new Error('Failed to fetch orders');
+                return res.json();
+            })
+            .then(data => {
+                setOrdersList(data);
+            })
+            .catch(err => console.error('Error fetching customer orders:', err))
+            .finally(() => setOrdersLoading(false));
+    }, [isOrdersRoute, authToken]);
+
+    // Fetch Admin Dashboard Data
+    useEffect(() => {
+        if (!isAdminRoute || !authToken || currentUser?.role !== 'admin') return;
+
+        // Fetch Orders
+        setAdminOrdersLoading(true);
+        fetch(`${API_BASE_URL}/api/admin/orders`, {
+            headers: { Authorization: `Bearer ${authToken}` }
+        })
+            .then(res => res.ok ? res.json() : [])
+            .then(data => setAdminOrders(data))
+            .catch(err => console.error('Error fetching admin orders:', err))
+            .finally(() => setAdminOrdersLoading(false));
+
+        // Fetch Newsletter subscribers
+        setAdminSubsLoading(true);
+        fetch(`${API_BASE_URL}/api/admin/newsletter`, {
+            headers: { Authorization: `Bearer ${authToken}` }
+        })
+            .then(res => res.ok ? res.json() : [])
+            .then(data => setAdminSubs(data))
+            .catch(err => console.error('Error fetching admin newsletter:', err))
+            .finally(() => setAdminSubsLoading(false));
+
+        // Refetch products to get latest stock / active status
+        fetch(`${API_BASE_URL}/api/products`)
+            .then(res => res.ok ? res.json() : [])
+            .then(data => {
+                if (data && data.length > 0) setProducts(data);
+            })
+            .catch(() => {});
+    }, [isAdminRoute, authToken, currentUser]);
 
     // Scroll Effects
     useEffect(() => {
@@ -543,15 +635,16 @@ export default function App() {
     // --- CART FUNCTIONALITY ---
     const applyLocalAddToCart = (product) => {
         setCart(prev => {
-            const exists = prev.find(item => item.product._id === product._id);
+            const size = product.size || null;
+            const exists = prev.find(item => item.product._id === product._id && (item.size || null) === size);
             if (exists) {
                 return prev.map(item =>
-                    item.product._id === product._id
+                    (item.product._id === product._id && (item.size || null) === size)
                         ? { ...item, quantity: item.quantity + 1 }
                         : item
                 );
             }
-            return [...prev, { product, quantity: 1 }];
+            return [...prev, { product, quantity: 1, size }];
         });
     };
 
@@ -585,8 +678,8 @@ export default function App() {
         setCartOpen(true);
     };
 
-    const updateCartQty = (productId, change) => {
-        const target = cart.find(item => item.product._id === productId);
+    const updateCartQty = (productId, size, change) => {
+        const target = cart.find(item => item.product._id === productId && (item.size || null) === (size || null));
         const nextQty = Math.max(0, (target?.quantity || 0) + change);
 
         if (authToken && target) {
@@ -609,7 +702,7 @@ export default function App() {
 
         setCart(prev => {
             return prev.map(item => {
-                if (item.product._id === productId) {
+                if (item.product._id === productId && (item.size || null) === (size || null)) {
                     const newQty = item.quantity + change;
                     return newQty > 0 ? { ...item, quantity: newQty } : item;
                 }
@@ -618,8 +711,8 @@ export default function App() {
         });
     };
 
-    const removeFromCart = (productId) => {
-        const target = cart.find(item => item.product._id === productId);
+    const removeFromCart = (productId, size) => {
+        const target = cart.find(item => item.product._id === productId && (item.size || null) === (size || null));
 
         if (authToken && target) {
             const sizeQuery = target.size ? `?size=${encodeURIComponent(target.size)}` : '';
@@ -636,7 +729,7 @@ export default function App() {
             return;
         }
 
-        setCart(prev => prev.filter(item => item.product._id !== productId));
+        setCart(prev => prev.filter(item => !(item.product._id === productId && (item.size || null) === (size || null))));
     };
 
     const subtotal = cart.reduce((sum, item) => sum + (item.product.price * item.quantity), 0);
@@ -967,6 +1060,118 @@ export default function App() {
         navigateTo(`/product/${product.id}`);
     };
 
+    // Admin CRUD - Update Order Status
+    const handleStatusChange = (orderId, newStatus) => {
+        fetch(`${API_BASE_URL}/api/admin/orders/${orderId}/status`, {
+            method: 'PATCH',
+            headers: {
+                'Content-Type': 'application/json',
+                Authorization: `Bearer ${authToken}`
+            },
+            body: JSON.stringify({ status: newStatus })
+        })
+            .then(res => {
+                if (!res.ok) throw new Error('Failed to update status');
+                return res.json();
+            })
+            .then(updatedOrder => {
+                setAdminOrders(prev => prev.map(o => o._id === orderId ? updatedOrder : o));
+            })
+            .catch(err => alert(err.message));
+    };
+
+    // Admin CRUD - Toggle Product Active Status
+    const handleProductActiveToggle = (productId, currentActive) => {
+        const url = `${API_BASE_URL}/api/admin/products/${productId}`;
+        const method = currentActive ? 'DELETE' : 'PATCH';
+        const body = currentActive ? null : JSON.stringify({ active: true });
+
+        fetch(url, {
+            method: method,
+            headers: {
+                'Content-Type': 'application/json',
+                Authorization: `Bearer ${authToken}`
+            },
+            ...(body ? { body } : {})
+        })
+            .then(res => {
+                if (!res.ok) throw new Error('Failed to toggle product status');
+                return res.json();
+            })
+            .then(() => {
+                // Refetch products list
+                fetch(`${API_BASE_URL}/api/products`)
+                    .then(res => res.ok ? res.json() : [])
+                    .then(data => {
+                        if (data && data.length > 0) setProducts(data);
+                    });
+            })
+            .catch(err => alert(err.message));
+    };
+
+    // Admin CRUD - Save Product (Create / Update)
+    const handleSaveProduct = (e) => {
+        e.preventDefault();
+        const isEdit = Boolean(editingProduct);
+        const url = isEdit
+            ? `${API_BASE_URL}/api/admin/products/${editingProduct._id}`
+            : `${API_BASE_URL}/api/admin/products`;
+        const method = isEdit ? 'PATCH' : 'POST';
+
+        const payload = {
+            name: productForm.name,
+            category: productForm.category,
+            price: Number(productForm.price),
+            material: productForm.material,
+            description: productForm.description,
+            image: productForm.image,
+            sizes: productForm.sizes.split(',').map(s => s.trim()).filter(Boolean),
+            stock: Number(productForm.stock),
+            active: true
+        };
+
+        fetch(url, {
+            method: method,
+            headers: {
+                'Content-Type': 'application/json',
+                Authorization: `Bearer ${authToken}`
+            },
+            body: JSON.stringify(payload)
+        })
+            .then(res => {
+                if (!res.ok) throw new Error('Failed to save product');
+                return res.json();
+            })
+            .then(() => {
+                setProductModalOpen(false);
+                setEditingProduct(null);
+                setProductForm({ name: '', category: 'T-SHIRTS', price: '', material: '', description: '', image: '/logo_tee_mockup.png', sizes: 'S, M, L, XL', stock: 10 });
+                // Refetch products
+                fetch(`${API_BASE_URL}/api/products`)
+                    .then(res => res.ok ? res.json() : [])
+                    .then(data => {
+                        if (data && data.length > 0) setProducts(data);
+                    });
+            })
+            .catch(err => alert(err.message));
+    };
+
+    // Admin CRUD - Trigger Edit Product Form Modal
+    const triggerEditProduct = (product) => {
+        setEditingProduct(product);
+        setProductForm({
+            name: product.name,
+            category: product.category || 'T-SHIRTS',
+            price: product.price,
+            material: product.material || '',
+            description: product.description || '',
+            image: product.image || '/logo_tee_mockup.png',
+            sizes: (product.sizes || []).join(', '),
+            stock: product.stock || 10
+        });
+        setProductModalOpen(true);
+    };
+
     const getProductFilterText = (product) => {
         return `${product.name} ${product.category} ${product.material} ${product.description || ''}`.toUpperCase();
     };
@@ -1049,12 +1254,7 @@ export default function App() {
         .filter((product) => product.id !== selectedStoreProduct.id)
         .slice(0, 5);
 
-    const productRouteMatch = routePath.match(/^\/product\/([^/]+)$/);
-    const routeProduct = productRouteMatch
-        ? heroSlidesData.find((product) => product.id === productRouteMatch[1]) || null
-        : null;
-    const isShopRoute = routePath === '/shop';
-    const isProductRoute = Boolean(routeProduct);
+
     const listingTitle = selectedStoreCategory === 'ALL' || selectedStoreCategory === 'NEW'
         ? 'LINEN EDIT'
         : `${selectedStoreCategory} EDIT`;
@@ -1089,8 +1289,18 @@ export default function App() {
             return;
         }
 
+        if (isAdminRoute) {
+            document.title = 'Admin Dashboard | THELOGOLESS';
+            return;
+        }
+
+        if (isOrdersRoute) {
+            document.title = 'Order History | THELOGOLESS';
+            return;
+        }
+
         document.title = 'THELOGOLESS';
-    }, [isProductRoute, isShopRoute, routeProduct]);
+    }, [isProductRoute, isShopRoute, isAdminRoute, isOrdersRoute, routeProduct]);
 
     const renderedSlides = [
         { ...heroSlidesData[heroSlidesData.length - 2], id: 'hero_clone_9' },
@@ -1206,6 +1416,29 @@ export default function App() {
                                 </div>
                             )}
                         </div>
+
+                        {currentUser?.role === 'admin' && (
+                            <button
+                                className="nav-icon-btn admin-badge-btn"
+                                type="button"
+                                aria-label="Admin Dashboard"
+                                onClick={() => navigateTo('/admin')}
+                                title="Admin Dashboard"
+                                style={{
+                                    border: '1px solid var(--color-accent-gold)',
+                                    borderRadius: '12px',
+                                    fontSize: '0.66rem',
+                                    padding: '4px 8px',
+                                    letterSpacing: '0.05em',
+                                    textTransform: 'uppercase',
+                                    color: 'var(--color-accent-gold)',
+                                    fontWeight: '700',
+                                    marginRight: '6px'
+                                }}
+                            >
+                                Admin
+                            </button>
+                        )}
 
                         <button
                             className={`nav-icon-btn ${currentUser ? 'signed-in' : ''}`}
@@ -1792,6 +2025,54 @@ export default function App() {
                                     ))}
                                 </div>
                             </div>
+
+                            {/* Size Selection & Add to Cart */}
+                            <div className="setting-group" style={{ marginTop: '24px', paddingTop: '20px', borderTop: '1px solid rgba(255,255,255,0.06)' }}>
+                                <div className="setting-title">Select Size & Purchase</div>
+                                <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+                                    <div className="customizer-size-select-wrapper" style={{ flex: '0 0 100px' }}>
+                                        <select
+                                            value={selectedSize}
+                                            onChange={(e) => setSelectedSize(e.target.value)}
+                                            style={{
+                                                width: '100%',
+                                                padding: '12px',
+                                                background: 'transparent',
+                                                border: '1px solid rgba(255, 255, 255, 0.16)',
+                                                color: 'inherit',
+                                                fontFamily: 'inherit',
+                                                fontSize: '0.88rem',
+                                                cursor: 'pointer'
+                                            }}
+                                            className="customizer-size-select"
+                                        >
+                                            {['XS', 'S', 'M', 'L', 'XL', 'XXL'].map(sz => (
+                                                <option key={sz} value={sz} style={{ background: '#121315', color: '#fff' }}>{sz}</option>
+                                            ))}
+                                        </select>
+                                    </div>
+                                    <button
+                                        type="button"
+                                        style={{ flex: 1, padding: '12px 24px', fontWeight: '700' }}
+                                        className="btn-primary"
+                                        onClick={() => {
+                                            const baseTee = products.find(p => p._id === 'prod_1') || {
+                                                _id: 'prod_1',
+                                                name: 'Obsidian Heavyweight Tee',
+                                                price: 120,
+                                                image: '/logo_tee_mockup.png'
+                                            };
+                                            const customSizeString = `${selectedSize} | Fabric: ${customizerState.fabric} | Signature: ${customizerState.logo} | Thread: ${customizerState.color} | Placement: ${customizerState.placement}`;
+                                            addToCart({
+                                                ...baseTee,
+                                                size: customSizeString
+                                            });
+                                        }}
+                                    >
+                                        Add Custom Tee to Bag • $120
+                                    </button>
+                                </div>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -1931,14 +2212,30 @@ export default function App() {
                                 <img src={item.product.image} alt={item.product.name} className="cart-item-img" />
                                 <div className="cart-item-info">
                                     <div className="cart-item-name">{item.product.name}</div>
-                                    {item.size && <div className="cart-item-price">Size {item.size}</div>}
+                                    {item.size && (() => {
+                                        const parsed = parseCustomizerSize(item.size);
+                                        if (parsed) {
+                                            return (
+                                                <div className="cart-item-custom-details" style={{ fontSize: '0.8rem', color: 'var(--color-text-muted)', margin: '4px 0' }}>
+                                                    <div style={{ textTransform: 'uppercase', fontSize: '0.74rem', letterSpacing: '0.04em', color: 'var(--color-text-light)' }}>Size: <strong>{parsed.size}</strong></div>
+                                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', marginTop: '4px', borderLeft: '1px solid rgba(255,255,255,0.08)', paddingLeft: '8px' }}>
+                                                        <span>Fabric: <em>{parsed.details.Fabric}</em></span>
+                                                        <span>Signature: <em>{parsed.details.Signature}</em></span>
+                                                        <span>Thread: <em>{parsed.details.Thread}</em></span>
+                                                        <span>Placement: <em>{parsed.details.Placement}</em></span>
+                                                    </div>
+                                                </div>
+                                            );
+                                        }
+                                        return <div className="cart-item-price">Size {item.size}</div>;
+                                    })()}
                                     <div className="cart-item-price">${item.product.price}</div>
                                     <div className="cart-item-qty">
-                                        <button className="qty-btn" onClick={() => updateCartQty(item.product._id, -1)}>-</button>
+                                        <button className="qty-btn" onClick={() => updateCartQty(item.product._id, item.size, -1)}>-</button>
                                         <span className="qty-num">{item.quantity}</span>
-                                        <button className="qty-btn" onClick={() => updateCartQty(item.product._id, 1)}>+</button>
+                                        <button className="qty-btn" onClick={() => updateCartQty(item.product._id, item.size, 1)}>+</button>
                                     </div>
-                                    <button className="cart-remove-btn" onClick={() => removeFromCart(item.product._id)}>Remove</button>
+                                    <button className="cart-remove-btn" onClick={() => removeFromCart(item.product._id, item.size)}>Remove</button>
                                 </div>
                             </div>
                         ))
@@ -1991,9 +2288,13 @@ export default function App() {
                                     <strong>{currentUser.role}</strong>
                                 </div>
                             </div>
-                            <div className="auth-actions">
-                                <button type="button" className="btn-secondary" onClick={() => setAccountOpen(false)}>Close</button>
-                                <button type="button" className="btn-primary" onClick={handleLogout}>Logout</button>
+                            <div className="auth-actions" style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+                                <button type="button" className="btn-secondary" style={{ flex: '1 1 auto' }} onClick={() => setAccountOpen(false)}>Close</button>
+                                <button type="button" className="btn-secondary" style={{ flex: '1 1 auto' }} onClick={() => { setAccountOpen(false); navigateTo('/orders'); }}>Orders</button>
+                                {currentUser.role === 'admin' && (
+                                    <button type="button" className="btn-secondary" style={{ flex: '1 1 auto', border: '1px solid var(--color-accent-gold)', color: 'var(--color-accent-gold)' }} onClick={() => { setAccountOpen(false); navigateTo('/admin'); }}>Admin</button>
+                                )}
+                                <button type="button" className="btn-primary" style={{ flex: '1 1 100%' }} onClick={handleLogout}>Logout</button>
                             </div>
                             <div className={`form-response-msg ${authMessage ? 'active' : ''}`}>{authMessage}</div>
                         </>
@@ -2581,6 +2882,431 @@ export default function App() {
                         </div>
                     </div>
                 </section>
+            )}
+
+            {isOrdersRoute && (
+                <section className="storefront-route-layer orders-route-layer">
+                    <div className="storefront-utility-bar">
+                        <button className="storefront-utility-btn" type="button" onClick={() => navigateTo('/')}>Home</button>
+                        <div className="storefront-utility-center">Order History</div>
+                        <button className="storefront-utility-btn" type="button" onClick={() => setCartOpen(true)}>Bag ({cartCount})</button>
+                    </div>
+
+                    <div className="storefront-route-shell" style={{ padding: '40px 24px' }}>
+                        <div className="container" style={{ maxWidth: '800px' }}>
+                            <h2 style={{ fontFamily: 'var(--font-display)', letterSpacing: '0.08em', marginBottom: '8px' }}>YOUR Wardrobe orders</h2>
+                            <p style={{ color: 'var(--color-text-muted)', marginBottom: '32px', fontSize: '0.9rem' }}>Review your registered orders and tracking statuses.</p>
+
+                            {!authToken ? (
+                                <div style={{ textAlign: 'center', padding: '48px', border: '1px solid rgba(255,255,255,0.08)', background: 'rgba(255,255,255,0.02)' }}>
+                                    <p style={{ marginBottom: '20px', color: 'var(--color-text-muted)' }}>You must be logged in to view your order history.</p>
+                                    <button className="btn-primary" onClick={() => openAccountModal('login')}>Log In</button>
+                                </div>
+                            ) : ordersLoading ? (
+                                <div style={{ display: 'flex', justifyContent: 'center', padding: '48px' }}>
+                                    <div className="spinner"></div>
+                                </div>
+                            ) : ordersList.length === 0 ? (
+                                <div style={{ textAlign: 'center', padding: '48px', border: '1px solid rgba(255,255,255,0.08)' }}>
+                                    <p style={{ color: 'var(--color-text-muted)', marginBottom: '20px' }}>No orders found in your archive.</p>
+                                    <button className="btn-primary" onClick={() => navigateTo('/shop')}>Visit Shop</button>
+                                </div>
+                            ) : (
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+                                    {ordersList.map(order => (
+                                        <div key={order._id} className="order-history-card" style={{ border: '1px solid rgba(255,255,255,0.08)', background: 'rgba(255,255,255,0.02)', padding: '24px' }}>
+                                            <div style={{ display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px', borderBottom: '1px solid rgba(255,255,255,0.06)', paddingBottom: '16px', marginBottom: '16px' }}>
+                                                <div>
+                                                    <span style={{ fontSize: '0.74rem', textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--color-text-muted)' }}>Order ID</span>
+                                                    <div style={{ fontFamily: 'monospace', fontSize: '0.84rem', fontWeight: 'bold' }}>{order._id}</div>
+                                                </div>
+                                                <div>
+                                                    <span style={{ fontSize: '0.74rem', textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--color-text-muted)' }}>Placed On</span>
+                                                    <div style={{ fontSize: '0.88rem' }}>{new Date(order.createdAt).toLocaleDateString(undefined, { dateStyle: 'medium' })}</div>
+                                                </div>
+                                                <div>
+                                                    <span style={{ fontSize: '0.74rem', textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--color-text-muted)' }}>Status</span>
+                                                    <div>
+                                                        <span className={`status-badge status-${order.status.toLowerCase()}`}>
+                                                            {order.status}
+                                                        </span>
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                                                {order.items.map((item, idx) => {
+                                                    const parsed = parseCustomizerSize(item.size);
+                                                    return (
+                                                        <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.9rem' }}>
+                                                            <div>
+                                                                <strong style={{ color: 'var(--color-text-light)' }}>{item.name}</strong>
+                                                                <span style={{ color: 'var(--color-text-muted)', fontSize: '0.82rem', marginLeft: '12px' }}>
+                                                                    Qty: {item.quantity}
+                                                                </span>
+                                                                {parsed ? (
+                                                                    <div style={{ fontSize: '0.78rem', color: 'var(--color-text-muted)', marginTop: '4px', paddingLeft: '8px', borderLeft: '1px solid rgba(255,255,255,0.08)' }}>
+                                                                        Size: {parsed.size} | {parsed.details.Fabric} | {parsed.details.Signature} | {parsed.details.Thread}
+                                                                    </div>
+                                                                ) : item.size ? (
+                                                                    <div style={{ fontSize: '0.78rem', color: 'var(--color-text-muted)', marginTop: '2px' }}>
+                                                                        Size: {item.size}
+                                                                    </div>
+                                                                ) : null}
+                                                            </div>
+                                                            <div style={{ fontWeight: 'bold' }}>${item.price * item.quantity}</div>
+                                                        </div>
+                                                    );
+                                                })}
+                                            </div>
+
+                                            <div style={{ display: 'flex', justifyContent: 'space-between', borderTop: '1px solid rgba(255,255,255,0.06)', paddingTop: '16px', marginTop: '16px', alignItems: 'center' }}>
+                                                <div>
+                                                    <span style={{ fontSize: '0.74rem', textTransform: 'uppercase', color: 'var(--color-text-muted)' }}>Ship To</span>
+                                                    <div style={{ fontSize: '0.88rem' }}>{order.customerName} — {order.location}</div>
+                                                </div>
+                                                <div style={{ textAlign: 'right' }}>
+                                                    <span style={{ fontSize: '0.74rem', textTransform: 'uppercase', color: 'var(--color-text-muted)' }}>Total Amount</span>
+                                                    <div style={{ fontSize: '1.25rem', fontFamily: 'var(--font-display)', color: 'var(--color-accent-gold)', fontWeight: 'bold' }}>${order.total}</div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                </section>
+            )}
+
+            {isAdminRoute && (
+                <section className="storefront-route-layer admin-route-layer">
+                    <div className="storefront-utility-bar">
+                        <button className="storefront-utility-btn" type="button" onClick={() => navigateTo('/')}>Home</button>
+                        <div className="storefront-utility-center">Admin Control Panel</div>
+                        <div />
+                    </div>
+
+                    {currentUser?.role !== 'admin' ? (
+                        <div style={{ padding: '60px 24px', textAlign: 'center' }}>
+                            <div className="container" style={{ maxWidth: '600px', border: '1px solid rgba(255,255,255,0.08)', padding: '48px', background: 'rgba(255,255,255,0.01)', margin: '0 auto' }}>
+                                <h2 style={{ fontFamily: 'var(--font-display)', color: 'var(--color-accent-gold)', marginBottom: '16px' }}>Access Denied</h2>
+                                <p style={{ color: 'var(--color-text-muted)', marginBottom: '24px' }}>This area is reserved for authenticated administrators only.</p>
+                                <button className="btn-primary" onClick={() => { navigateTo('/'); openAccountModal('login'); }}>Admin Login</button>
+                            </div>
+                        </div>
+                    ) : (
+                        <div className="storefront-route-shell" style={{ padding: '40px 24px' }}>
+                            <div className="container" style={{ maxWidth: '1200px' }}>
+                                {/* Header */}
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '20px', marginBottom: '32px' }}>
+                                    <div>
+                                        <h2 style={{ fontFamily: 'var(--font-display)', letterSpacing: '0.08em', marginBottom: '8px' }}>THELOGOLESS BACKOFFICE</h2>
+                                        <p style={{ color: 'var(--color-text-muted)', fontSize: '0.88rem' }}>Welcome back, {currentUser.name}. Manage inventory, orders, and subscriptions.</p>
+                                    </div>
+                                    {adminTab === 'products' && (
+                                        <button 
+                                            className="btn-primary" 
+                                            onClick={() => {
+                                                setEditingProduct(null);
+                                                setProductForm({ name: '', category: 'T-SHIRTS', price: '', material: '', description: '', image: '/logo_tee_mockup.png', sizes: 'S, M, L, XL', stock: 10 });
+                                                setProductModalOpen(true);
+                                            }}
+                                            style={{ padding: '10px 20px', fontSize: '0.8rem', letterSpacing: '0.08em' }}
+                                        >
+                                            + Add Product
+                                        </button>
+                                    )}
+                                </div>
+
+                                {/* Tabs Navigation */}
+                                <div className="admin-tabs" style={{ display: 'flex', gap: '16px', borderBottom: '1px solid rgba(255,255,255,0.08)', marginBottom: '32px', paddingBottom: '8px' }}>
+                                    <button 
+                                        className={`admin-tab-btn ${adminTab === 'orders' ? 'active' : ''}`} 
+                                        onClick={() => setAdminTab('orders')}
+                                        style={{ background: 'none', border: 'none', color: adminTab === 'orders' ? 'var(--color-accent-gold)' : 'var(--color-text-muted)', fontSize: '0.9rem', fontWeight: 'bold', cursor: 'pointer', padding: '8px 16px', borderBottom: adminTab === 'orders' ? '2px solid var(--color-accent-gold)' : 'none' }}
+                                    >
+                                        Orders ({adminOrders.length})
+                                    </button>
+                                    <button 
+                                        className={`admin-tab-btn ${adminTab === 'products' ? 'active' : ''}`} 
+                                        onClick={() => setAdminTab('products')}
+                                        style={{ background: 'none', border: 'none', color: adminTab === 'products' ? 'var(--color-accent-gold)' : 'var(--color-text-muted)', fontSize: '0.9rem', fontWeight: 'bold', cursor: 'pointer', padding: '8px 16px', borderBottom: adminTab === 'products' ? '2px solid var(--color-accent-gold)' : 'none' }}
+                                    >
+                                        Products ({products.length})
+                                    </button>
+                                    <button 
+                                        className={`admin-tab-btn ${adminTab === 'newsletter' ? 'active' : ''}`} 
+                                        onClick={() => setAdminTab('newsletter')}
+                                        style={{ background: 'none', border: 'none', color: adminTab === 'newsletter' ? 'var(--color-accent-gold)' : 'var(--color-text-muted)', fontSize: '0.9rem', fontWeight: 'bold', cursor: 'pointer', padding: '8px 16px', borderBottom: adminTab === 'newsletter' ? '2px solid var(--color-accent-gold)' : 'none' }}
+                                    >
+                                        Subscribers ({adminSubs.length})
+                                    </button>
+                                </div>
+
+                                {/* Orders Tab content */}
+                                {adminTab === 'orders' && (
+                                    adminOrdersLoading ? (
+                                        <div style={{ display: 'flex', justifyContent: 'center', padding: '48px' }}><div className="spinner"></div></div>
+                                    ) : adminOrders.length === 0 ? (
+                                        <p style={{ color: 'var(--color-text-muted)', textAlign: 'center', padding: '48px' }}>No orders found.</p>
+                                    ) : (
+                                        <div className="admin-table-wrapper" style={{ overflowX: 'auto' }}>
+                                            <table className="admin-table" style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', minWidth: '900px' }}>
+                                                <thead>
+                                                    <tr style={{ borderBottom: '1px solid rgba(255,255,255,0.08)', color: 'var(--color-text-light)', fontSize: '0.8rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                                                        <th style={{ padding: '12px' }}>Order ID</th>
+                                                        <th style={{ padding: '12px' }}>Customer</th>
+                                                        <th style={{ padding: '12px' }}>Items</th>
+                                                        <th style={{ padding: '12px' }}>Total</th>
+                                                        <th style={{ padding: '12px' }}>Status</th>
+                                                        <th style={{ padding: '12px' }}>Date</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody>
+                                                    {adminOrders.map(order => (
+                                                        <tr key={order._id} style={{ borderBottom: '1px solid rgba(255,255,255,0.04)', fontSize: '0.88rem' }}>
+                                                            <td style={{ padding: '12px', fontFamily: 'monospace', fontSize: '0.78rem' }}>{order._id}</td>
+                                                            <td style={{ padding: '12px' }}>
+                                                                <div style={{ fontWeight: 'bold', color: 'var(--color-text-light)' }}>{order.customerName}</div>
+                                                                <div style={{ fontSize: '0.78rem', color: 'var(--color-text-muted)' }}>{order.customerEmail}</div>
+                                                                <div style={{ fontSize: '0.78rem', color: 'var(--color-text-muted)' }}>{order.location}</div>
+                                                            </td>
+                                                            <td style={{ padding: '12px' }}>
+                                                                {order.items.map((item, idx) => {
+                                                                    const parsed = parseCustomizerSize(item.size);
+                                                                    return (
+                                                                        <div key={idx} style={{ margin: '4px 0', fontSize: '0.8rem' }}>
+                                                                            • {item.name} x {item.quantity} 
+                                                                            {parsed ? (
+                                                                                <span style={{ color: 'var(--color-text-muted)', fontSize: '0.74rem', display: 'block', paddingLeft: '8px' }}>
+                                                                                    [{parsed.size} | {parsed.details.Fabric} | {parsed.details.Signature}]
+                                                                                </span>
+                                                                            ) : item.size ? (
+                                                                                <span style={{ color: 'var(--color-text-muted)', fontSize: '0.74rem' }}> [{item.size}]</span>
+                                                                            ) : null}
+                                                                        </div>
+                                                                    );
+                                                                })}
+                                                            </td>
+                                                            <td style={{ padding: '12px', fontWeight: 'bold', color: 'var(--color-accent-gold)' }}>${order.total}</td>
+                                                            <td style={{ padding: '12px' }}>
+                                                                <select
+                                                                    value={order.status}
+                                                                    onChange={(e) => handleStatusChange(order._id, e.target.value)}
+                                                                    style={{
+                                                                        padding: '6px 10px',
+                                                                        background: '#121315',
+                                                                        border: '1px solid rgba(255,255,255,0.12)',
+                                                                        color: '#fff',
+                                                                        fontSize: '0.78rem',
+                                                                        cursor: 'pointer'
+                                                                    }}
+                                                                >
+                                                                    {['Pending', 'Shipped', 'Delivered', 'Cancelled'].map(st => (
+                                                                        <option key={st} value={st}>{st}</option>
+                                                                    ))}
+                                                                </select>
+                                                            </td>
+                                                            <td style={{ padding: '12px', fontSize: '0.8rem', color: 'var(--color-text-muted)' }}>
+                                                                {new Date(order.createdAt).toLocaleDateString()}
+                                                            </td>
+                                                        </tr>
+                                                    ))}
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                    )
+                                )}
+
+                                {/* Products Tab content */}
+                                {adminTab === 'products' && (
+                                    <div className="admin-table-wrapper" style={{ overflowX: 'auto' }}>
+                                        <table className="admin-table" style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', minWidth: '800px' }}>
+                                            <thead>
+                                                <tr style={{ borderBottom: '1px solid rgba(255,255,255,0.08)', color: 'var(--color-text-light)', fontSize: '0.8rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                                                    <th style={{ padding: '12px' }}>Image</th>
+                                                    <th style={{ padding: '12px' }}>Product Details</th>
+                                                    <th style={{ padding: '12px' }}>Category</th>
+                                                    <th style={{ padding: '12px' }}>Price</th>
+                                                    <th style={{ padding: '12px' }}>Stock</th>
+                                                    <th style={{ padding: '12px' }}>Status</th>
+                                                    <th style={{ padding: '12px' }}>Actions</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                {products.map(product => (
+                                                    <tr key={product._id} style={{ borderBottom: '1px solid rgba(255,255,255,0.04)', fontSize: '0.88rem', opacity: product.active === false ? 0.5 : 1 }}>
+                                                        <td style={{ padding: '12px' }}>
+                                                            <img src={product.image} alt={product.name} style={{ width: '40px', height: '52px', objectFit: 'cover' }} />
+                                                        </td>
+                                                        <td style={{ padding: '12px' }}>
+                                                            <div style={{ fontWeight: 'bold', color: 'var(--color-text-light)' }}>{product.name}</div>
+                                                            <div style={{ fontSize: '0.78rem', color: 'var(--color-text-muted)', textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap', maxWidth: '300px' }}>{product.material}</div>
+                                                        </td>
+                                                        <td style={{ padding: '12px', fontSize: '0.8rem', textTransform: 'uppercase' }}>{product.category}</td>
+                                                        <td style={{ padding: '12px', fontWeight: 'bold', color: 'var(--color-text-light)' }}>${product.price}</td>
+                                                        <td style={{ padding: '12px' }}>{product.stock || 0} items</td>
+                                                        <td style={{ padding: '12px' }}>
+                                                            <span className={`status-badge status-${product.active !== false ? 'delivered' : 'cancelled'}`} style={{ fontSize: '0.7rem' }}>
+                                                                {product.active !== false ? 'Active' : 'Archived'}
+                                                            </span>
+                                                        </td>
+                                                        <td style={{ padding: '12px' }}>
+                                                            <div style={{ display: 'flex', gap: '8px' }}>
+                                                                <button
+                                                                    type="button"
+                                                                    className="btn-secondary"
+                                                                    onClick={() => triggerEditProduct(product)}
+                                                                    style={{ padding: '4px 8px', fontSize: '0.74rem' }}
+                                                                >
+                                                                    Edit
+                                                                </button>
+                                                                <button
+                                                                    type="button"
+                                                                    className="btn-secondary"
+                                                                    onClick={() => handleProductActiveToggle(product._id, product.active !== false)}
+                                                                    style={{ padding: '4px 8px', fontSize: '0.74rem', borderColor: product.active !== false ? 'rgba(239, 68, 68, 0.4)' : 'rgba(16, 185, 129, 0.4)', color: product.active !== false ? 'rgba(239, 68, 68, 0.8)' : 'rgba(16, 185, 129, 0.8)' }}
+                                                                >
+                                                                    {product.active !== false ? 'Archive' : 'Restore'}
+                                                                </button>
+                                                            </div>
+                                                        </td>
+                                                    </tr>
+                                                ))}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                )}
+
+                                {/* Newsletter Subscribers Tab */}
+                                {adminTab === 'newsletter' && (
+                                    adminSubsLoading ? (
+                                        <div style={{ display: 'flex', justifyContent: 'center', padding: '48px' }}><div className="spinner"></div></div>
+                                    ) : adminSubs.length === 0 ? (
+                                        <p style={{ color: 'var(--color-text-muted)', textAlign: 'center', padding: '48px' }}>No subscribers found.</p>
+                                    ) : (
+                                        <div className="admin-table-wrapper" style={{ overflowX: 'auto' }}>
+                                            <table className="admin-table" style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', minWidth: '600px' }}>
+                                                <thead>
+                                                    <tr style={{ borderBottom: '1px solid rgba(255,255,255,0.08)', color: 'var(--color-text-light)', fontSize: '0.8rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                                                        <th style={{ padding: '12px' }}>Subscriber Email</th>
+                                                        <th style={{ padding: '12px' }}>Date Registered</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody>
+                                                    {adminSubs.map((sub, idx) => (
+                                                        <tr key={idx} style={{ borderBottom: '1px solid rgba(255,255,255,0.04)', fontSize: '0.88rem' }}>
+                                                            <td style={{ padding: '12px', fontWeight: 'bold', color: 'var(--color-text-light)' }}>{sub.email}</td>
+                                                            <td style={{ padding: '12px', color: 'var(--color-text-muted)', fontSize: '0.8rem' }}>
+                                                                {sub.subscribedAt ? new Date(sub.subscribedAt).toLocaleString() : 'N/A'}
+                                                            </td>
+                                                        </tr>
+                                                    ))}
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                    )
+                                )}
+                            </div>
+                        </div>
+                    )}
+                </section>
+            )}
+
+            {/* --- ADMIN PRODUCT ADD/EDIT MODAL --- */}
+            {productModalOpen && (
+                <div className="auth-modal-overlay open" onClick={() => setProductModalOpen(false)}>
+                    <div className="auth-modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '500px' }}>
+                        <button className="auth-close-btn" type="button" onClick={() => setProductModalOpen(false)}>&times;</button>
+                        <h3>{editingProduct ? 'Edit Product' : 'Add New Product'}</h3>
+                        <p className="auth-modal-sub">Define clothing specifications</p>
+
+                        <form className="auth-form" onSubmit={handleSaveProduct}>
+                            <div className="form-group">
+                                <label>Product Name</label>
+                                <input
+                                    type="text"
+                                    required
+                                    value={productForm.name}
+                                    onChange={(e) => setProductForm(prev => ({ ...prev, name: e.target.value }))}
+                                />
+                            </div>
+                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                                <div className="form-group">
+                                    <label>Category</label>
+                                    <select
+                                        value={productForm.category}
+                                        onChange={(e) => setProductForm(prev => ({ ...prev, category: e.target.value }))}
+                                        style={{ padding: '10px', background: '#121315', border: '1px solid rgba(255,255,255,0.12)', color: '#fff', width: '100%' }}
+                                    >
+                                        {['SHIRTS', 'JEANS', 'T-SHIRTS', 'POLOS', 'PLUS-SIZE', 'TROUSERS', 'SHORTS', 'ACCESSORIES'].map(cat => (
+                                            <option key={cat} value={cat}>{cat}</option>
+                                        ))}
+                                    </select>
+                                </div>
+                                <div className="form-group">
+                                    <label>Price ($)</label>
+                                    <input
+                                        type="number"
+                                        required
+                                        min="0"
+                                        value={productForm.price}
+                                        onChange={(e) => setProductForm(prev => ({ ...prev, price: e.target.value }))}
+                                    />
+                                </div>
+                            </div>
+                            <div className="form-group">
+                                <label>Material Composition</label>
+                                <input
+                                    type="text"
+                                    placeholder="e.g. 320GSM Organic Giza Cotton"
+                                    value={productForm.material}
+                                    onChange={(e) => setProductForm(prev => ({ ...prev, material: e.target.value }))}
+                                />
+                            </div>
+                            <div className="form-group">
+                                <label>Description</label>
+                                <textarea
+                                    value={productForm.description}
+                                    onChange={(e) => setProductForm(prev => ({ ...prev, description: e.target.value }))}
+                                    style={{ width: '100%', minHeight: '80px', padding: '10px', background: 'transparent', border: '1px solid rgba(255,255,255,0.12)', color: 'inherit', fontFamily: 'inherit' }}
+                                />
+                            </div>
+                            <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 0.8fr', gap: '12px' }}>
+                                <div className="form-group">
+                                    <label>Available Sizes (comma-separated)</label>
+                                    <input
+                                        type="text"
+                                        value={productForm.sizes}
+                                        onChange={(e) => setProductForm(prev => ({ ...prev, sizes: e.target.value }))}
+                                    />
+                                </div>
+                                <div className="form-group">
+                                    <label>Stock Level</label>
+                                    <input
+                                        type="number"
+                                        min="0"
+                                        value={productForm.stock}
+                                        onChange={(e) => setProductForm(prev => ({ ...prev, stock: e.target.value }))}
+                                    />
+                                </div>
+                            </div>
+                            <div className="form-group">
+                                <label>Image Path / URL</label>
+                                <input
+                                    type="text"
+                                    value={productForm.image}
+                                    onChange={(e) => setProductForm(prev => ({ ...prev, image: e.target.value }))}
+                                />
+                            </div>
+
+                            <button type="submit" className="btn-primary" style={{ width: '100%', marginTop: '16px', padding: '12px' }}>
+                                {editingProduct ? 'Update Product Specifications' : 'Publish Product to Store'}
+                            </button>
+                        </form>
+                    </div>
+                </div>
             )}
         </>
     );
