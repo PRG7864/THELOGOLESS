@@ -12,6 +12,8 @@ const defaultProducts = [
         hoverImage: '/hero_slide_4.png'
     },
     {
+
+        
         _id: 'prod_2',
         name: 'Normandy Linen Shirt',
         price: 160,
