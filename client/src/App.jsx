@@ -10,10 +10,12 @@ const defaultProducts = [
         material: '320GSM Long-Staple Egyptian Cotton',
         image: '/logo_tee_mockup.png',
         hoverImage: '/hero_slide_4.png'
+
+
+
     },
     {
 
-        
         _id: 'prod_2',
         name: 'Normandy Linen Shirt',
         price: 160,
@@ -29,6 +31,8 @@ const defaultProducts = [
         image: '/logo_concept_seam.png',
         hoverImage: '/hero_slide_2.png'
     },
+
+
     {
         _id: 'prod_4',
         name: 'Sage Terry Hoodie',
@@ -381,7 +385,7 @@ export default function App() {
     const [authForm, setAuthForm] = useState({ name: '', email: '', password: '' });
     const [authToken, setAuthToken] = useState(() => localStorage.getItem('thelogoless_token') || '');
     const [currentUser, setCurrentUser] = useState(() => getSavedUser());
-        // --- ADMIN & ORDER HISTORY STATES ---
+    // --- ADMIN & ORDER HISTORY STATES ---
     const [ordersList, setOrdersList] = useState([]);
     const [ordersLoading, setOrdersLoading] = useState(false);
     const [adminOrders, setAdminOrders] = useState([]);
@@ -540,7 +544,7 @@ export default function App() {
             .then(data => {
                 if (data && data.length > 0) setProducts(data);
             })
-            .catch(() => {});
+            .catch(() => { });
     }, [isAdminRoute, authToken, currentUser]);
 
     // Scroll Effects
@@ -3007,8 +3011,8 @@ export default function App() {
                                         <p style={{ color: 'var(--color-text-muted)', fontSize: '0.88rem' }}>Welcome back, {currentUser.name}. Manage inventory, orders, and subscriptions.</p>
                                     </div>
                                     {adminTab === 'products' && (
-                                        <button 
-                                            className="btn-primary" 
+                                        <button
+                                            className="btn-primary"
                                             onClick={() => {
                                                 setEditingProduct(null);
                                                 setProductForm({ name: '', category: 'T-SHIRTS', price: '', material: '', description: '', image: '/logo_tee_mockup.png', sizes: 'S, M, L, XL', stock: 10 });
@@ -3023,22 +3027,22 @@ export default function App() {
 
                                 {/* Tabs Navigation */}
                                 <div className="admin-tabs" style={{ display: 'flex', gap: '16px', borderBottom: '1px solid rgba(255,255,255,0.08)', marginBottom: '32px', paddingBottom: '8px' }}>
-                                    <button 
-                                        className={`admin-tab-btn ${adminTab === 'orders' ? 'active' : ''}`} 
+                                    <button
+                                        className={`admin-tab-btn ${adminTab === 'orders' ? 'active' : ''}`}
                                         onClick={() => setAdminTab('orders')}
                                         style={{ background: 'none', border: 'none', color: adminTab === 'orders' ? 'var(--color-accent-gold)' : 'var(--color-text-muted)', fontSize: '0.9rem', fontWeight: 'bold', cursor: 'pointer', padding: '8px 16px', borderBottom: adminTab === 'orders' ? '2px solid var(--color-accent-gold)' : 'none' }}
                                     >
                                         Orders ({adminOrders.length})
                                     </button>
-                                    <button 
-                                        className={`admin-tab-btn ${adminTab === 'products' ? 'active' : ''}`} 
+                                    <button
+                                        className={`admin-tab-btn ${adminTab === 'products' ? 'active' : ''}`}
                                         onClick={() => setAdminTab('products')}
                                         style={{ background: 'none', border: 'none', color: adminTab === 'products' ? 'var(--color-accent-gold)' : 'var(--color-text-muted)', fontSize: '0.9rem', fontWeight: 'bold', cursor: 'pointer', padding: '8px 16px', borderBottom: adminTab === 'products' ? '2px solid var(--color-accent-gold)' : 'none' }}
                                     >
                                         Products ({products.length})
                                     </button>
-                                    <button 
-                                        className={`admin-tab-btn ${adminTab === 'newsletter' ? 'active' : ''}`} 
+                                    <button
+                                        className={`admin-tab-btn ${adminTab === 'newsletter' ? 'active' : ''}`}
                                         onClick={() => setAdminTab('newsletter')}
                                         style={{ background: 'none', border: 'none', color: adminTab === 'newsletter' ? 'var(--color-accent-gold)' : 'var(--color-text-muted)', fontSize: '0.9rem', fontWeight: 'bold', cursor: 'pointer', padding: '8px 16px', borderBottom: adminTab === 'newsletter' ? '2px solid var(--color-accent-gold)' : 'none' }}
                                     >
@@ -3079,7 +3083,7 @@ export default function App() {
                                                                     const parsed = parseCustomizerSize(item.size);
                                                                     return (
                                                                         <div key={idx} style={{ margin: '4px 0', fontSize: '0.8rem' }}>
-                                                                            • {item.name} x {item.quantity} 
+                                                                            • {item.name} x {item.quantity}
                                                                             {parsed ? (
                                                                                 <span style={{ color: 'var(--color-text-muted)', fontSize: '0.74rem', display: 'block', paddingLeft: '8px' }}>
                                                                                     [{parsed.size} | {parsed.details.Fabric} | {parsed.details.Signature}]
